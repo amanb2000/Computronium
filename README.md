@@ -1,7 +1,9 @@
 # Computronium
 
 Let's build computronium! A "universal update rule" that performs predictive
-coding, much like the human cortex. 
+coding, much like the human cortex. Scalable in space, abstraction, and time! 
+Use our open-source computronium to achieve maximal mass-energy conversion to
+computation.
 
 **Setup**: 
 ```bash
@@ -16,10 +18,7 @@ pip3 install -r requirements.txt
 pip3 install torch --index-url https://download.pytorch.org/whl/cu118
 ```
 
-**Data**: Using Google's
-*[Kinetics](https://research.google/pubs/the-kinetics-human-action-video-dataset/)
-*dataset with help from the
-*[CVDFoundatoin](https://github.com/cvdfoundation/kinetics-dataset).
+**Data**: Using Google's [Kinetics](https://research.google/pubs/the-kinetics-human-action-video-dataset/) dataset with help from the [CVDFoundatoin](https://github.com/cvdfoundation/kinetics-dataset).
 ```bash
 cd dataset
 ./k400_downloader.sh 
