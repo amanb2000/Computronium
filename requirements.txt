@@ -6,4 +6,7 @@ ipython
 scipy
 tqdm
 opencv-python
+av
+pydantic
 
+jax
