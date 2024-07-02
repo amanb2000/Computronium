@@ -1,0 +1,1 @@
+from computronium.video_utils import rescale_frame
