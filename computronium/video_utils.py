@@ -12,6 +12,8 @@ import concurrent.futures
 import pydantic 
 from tqdm import tqdm
 
+import pdb
+
 
 def rescale_frame(frame, height_width): 
     """
@@ -94,7 +96,9 @@ def video_data_generator(video_paths, batch_size,
     as jax.numpy arrays of shape [num_frames, batch_size, channels, height, width].
     """
     num_videos = len(video_paths)
-    for i in range(0, num_videos, batch_size):
+    # for i in range(0, num_videos, batch_size):
+    i = 0
+    while True: 
         batch_paths = video_paths[i:i+batch_size]
         # batch_data = [load_video(path) for path in batch_paths]
         batch_data = async_video_loader(batch_paths, num_workers=num_workers, rescale=rescale)
@@ -105,5 +109,9 @@ def video_data_generator(video_paths, batch_size,
         if float01:
             batch_data = batch_data.astype(np.float32) / 255.0
         yield np.array(batch_data)
+
+        i += batch_size 
+        if i > num_videos - batch_size:
+            i = 0
 
 
