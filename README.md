@@ -10,10 +10,10 @@ computation.
 # make + activate a virtual environment (optional):
 python3 -m venv venv
 source venv/bin/activate
-# install o1 package:
-pip3 install -e .  
-# install dependendencies:
+
+# install dependencies
 pip3 install -r requirements.txt
+
 # make sure your torch is the proper version for our setup
 pip3 install torch --index-url https://download.pytorch.org/whl/cu118
 ```
