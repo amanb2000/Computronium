@@ -14,6 +14,9 @@ source venv/bin/activate
 # install dependencies
 pip3 install -r requirements.txt
 
+# install computronium package in edit mode
+pip3 install -e .
+
 # make sure your torch is the proper version for our setup
 pip3 install torch --index-url https://download.pytorch.org/whl/cu118
 ```
@@ -23,4 +26,17 @@ pip3 install torch --index-url https://download.pytorch.org/whl/cu118
 cd dataset
 ./k400_downloader.sh 
 ./k400_extractor.sh
+```
+
+
+## Tests
+```bash
+# run all tests: 
+coverage run -m unittest discover
+
+# get coverage report:
+coverage report --include=computronium/*
+
+# run a specific test:
+coverage run -m unittest tests/test_utils.py
 ```
