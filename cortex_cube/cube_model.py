@@ -84,3 +84,9 @@ class cube(nn.Module):
 
         return MSE + weight_regularization*weight_reg + activation_regularization*activation_reg
 
+    def instrumentation_values(self):
+        shared_channel_idx = torch.tensor([(i+1)*self.block_length + j for i in range(self.num_blocks-1) for j in range(self.block_overlap_depth)])
+        return {
+            "block_activations": [(i, torch.norm(self.Phi[:, (i)*self.block_length:(i+1)*self.block_length+self.block_overlap_depth]).item()) for i in range(self.num_blocks)],
+            "shared_channel_activations": [(i, torch.norm(self.Phi[:, shared_channel_idx[i]]).item()) for i in range(len(self.num_blocks-1))],
+        }
