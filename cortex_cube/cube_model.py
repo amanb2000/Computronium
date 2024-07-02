@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
+import pdb
 
 class cube(nn.Module):
-    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1):
+    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu"):
         super(cube, self).__init__()
         if num_channels_list[0] != num_channels_list[-1]:
             raise ValueError("First and last number of kernels must be the same")
@@ -12,10 +13,11 @@ class cube(nn.Module):
         self.kernel_size = kernel_size
         self.num_channels_list = num_channels_list
         self.len_num_channels_list = len(num_channels_list)
+        self.device = device
 
-        self.input_conv = [nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2) for i in range(self.len_num_channels_list-1)]
+        self.input_conv = [nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2, device=device) for i in range(self.len_num_channels_list-1)]
         
-        self.body_conv = [nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2) for i in range(self.len_num_channels_list-1)]
+        self.body_conv = [nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2, device=device) for i in range(self.len_num_channels_list-1)]
 
         self.block_length = num_channels_list[-1] - block_overlap_depth
         self.Phi_depth = self.num_blocks * self.block_length + block_overlap_depth
@@ -23,14 +25,14 @@ class cube(nn.Module):
         self.Phi = None
 
     def forward(self, x):
-        batch_size = x.shape[0]
-        c = x.shape[1]
+        batch_size = x.shape[0] # N, batch_size
+        c = x.shape[1] # Number of channels
         assert c == 3, "Input tensor must have 3 channels (RGB)"
-        m = x.shape[2]
-        n = x.shape[3]
+        m = x.shape[2] # Width of video frame
+        n = x.shape[3] # Height of video frame
 
         if self.Phi is None:
-            self.Phi = torch.zeros(batch_size, self.Phi_depth, m, n)
+            self.Phi = torch.zeros(batch_size, self.Phi_depth, m, n).to(self.device)
 
         input_block_depth = self.num_channels_list[-1]
         dPhidt_input = torch.cat((x, self.Phi[:, 3:input_block_depth]), dim=1)
@@ -58,16 +60,27 @@ class cube(nn.Module):
             dPhidt[:, (block+1)*self.block_length:(block+2)*self.block_length+self.block_overlap_depth] += dPhidt_body_list[block]
 
         return dPhidt
+    
+    def loss(self, y, y_pred, weight_regularization=0.01, activation_regularization=0.01):
+        batch_size = y.shape[0] # N, batch_size
+        c = y.shape[1] # Number of channels
+        m = y.shape[2] # Width of video frame
+        n = y.shape[3] # Height of video frame
 
+        MSE = torch.mean((y - y_pred)**2)
 
-if __name__ == "__main__":
+        # Weight regularization
+        weight_reg = 0
+        for input_conv in self.input_conv:
+            weight_reg += torch.norm(input_conv.weight)**2
+        for body_conv in self.body_conv:
+            weight_reg += torch.norm(body_conv.weight)**2
+        
+        # Activation regularization for the shared layers only!
+        activation_reg = 0
+        shared_channel_idx = torch.tensor([(i+1)*self.block_length + j for i in range(self.num_blocks-1) for j in range(self.block_overlap_depth)])
+        #print("Check shared_channel_idx")
+        activation_reg += torch.mean(self.Phi[:, shared_channel_idx])**2
 
-    # Test our model with an input of all zeros!
+        return MSE + weight_regularization*weight_reg + activation_regularization*activation_reg
 
-    model = cube()
-
-    x = torch.zeros(1, 3, 32, 32)
-
-    y = model(x)
-
-    print(y)
