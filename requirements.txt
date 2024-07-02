@@ -10,3 +10,4 @@ av
 pydantic
 
 jax
+coverage
