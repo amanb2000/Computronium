@@ -1,6 +1,7 @@
 # Main training loop for the cube cortex video predictive coderl:
 # run from root of repo `python3 cortex_cube/main.py`
 
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,6 +17,18 @@ import pdb
 
 
 DATA_DIR = "dataset/debug/"
+OUT_DIR = "results/debug/"
+BATCH_SIZE = 5
+LR = 0.001
+NUM_EPOCHS = 1000
+NUM_WORKERS = 5
+
+video_paths = glob.glob(DATA_DIR + "*.mp4")
+num_videos = 30
+
+# if it doesn't exist, make OUT_DIR
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
 
 
 def visualize_frames(video, num_frames=5, output_path='figures/debug_load.png'):
@@ -35,15 +48,6 @@ def visualize_frames(video, num_frames=5, output_path='figures/debug_load.png'):
     plt.close()
 
 
-# glob all mp4 files in the directory
-video_paths = glob.glob(DATA_DIR + "*.mp4")
-num_videos = 3
-
-for video in async_video_loader(video_paths[:3], num_workers=1, rescale=[64, 64]):
-    print("video shape: ", video.shape)
-    visualize_frames(video, num_frames=5, output_path='figures/debug_load.png')
-    break
-
 
 # use video_data_generator(video_paths, batch_size, 
                         #  num_workers=4, 
@@ -56,8 +60,6 @@ for batch_data_np in video_data_generator(video_paths[:10], batch_size=2, num_wo
     break
 
 
-# Set up the model
-NUM_EPOCHS = 10
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = torch.device("mps:0")
@@ -67,21 +69,20 @@ model = cube(kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block
 model_input_convs = [conv.weight for conv in model.input_conv]
 model_body_convs = [conv.weight for conv in model.body_conv]
 model_params = model_input_convs + model_body_convs
-optimizer = optim.Adam(model_params, lr=0.001)
+optimizer = optim.Adam(model_params, lr=LR)
+
+# print out the model shape and number of parameters really pretty
+print(model)
+print("Number of parameters: ", sum(p.numel() for p in model_params if p.requires_grad))
+
 
 # Set up data. For now we will use dummy data.
-
-num_timesteps = 100
-
 # data = torch.tensor(batch_data_np, dtype=torch.float32).to(device)
-
-pdb.set_trace()
 
 losses = []
 # for epoch in range(NUM_EPOCHS):
 epoch = 0
-for data_np in video_data_generator(video_paths[:10], batch_size=2, num_workers=1, rescale=[64, 64], float01=True): 
-
+for data_np in video_data_generator(video_paths[:num_videos], batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, rescale=[64, 64], float01=True): 
     data = torch.tensor(data_np, dtype=torch.float32).to(device)
     num_timesteps = data.shape[0]
 
@@ -91,15 +92,23 @@ for data_np in video_data_generator(video_paths[:10], batch_size=2, num_workers=
         x = data[t]
         y = model(x)
         loss += model.loss(y[:, 0:3], data[t+1])
+
+        # save the instrumentation values 
+        # inst_value = model.instrumentation_values()
+        # save to OUT_DIR/instrumentation_values.txt
+        # with open(OUT_DIR + f'instrumentation_values_ep{epoch}_frame{t}.txt', 'w') as f:
+            # f.write(inst_value)
     
     loss.backward()
     optimizer.step()
     losses += [loss.item()]
 
     epoch += 1
-    print("Epoch: {}, Loss: {}".format(epoch, loss.item()))
+    print("Epoch: {}, Loss: {}, Batch: {}, Frames: {}".format(epoch, loss.item(), data.shape[1], data.shape[0]))
     if epoch > NUM_EPOCHS:
         break
+
+
 
 
 # Plot the loss over time
@@ -108,6 +117,9 @@ plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.show()
 # save to figures 
-plt.savefig('figures/debug_loss.png')
+plt.savefig(os.path.join(OUT_DIR, 'debug_loss.png'))
+
+
+
 
 
