@@ -15,9 +15,9 @@ class cube(nn.Module):
         self.len_num_channels_list = len(num_channels_list)
         self.device = device
 
-        self.input_conv = [nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2, device=device) for i in range(self.len_num_channels_list-1)]
+        self.input_conv = nn.ModuleList([nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2) for i in range(self.len_num_channels_list-1)])
         
-        self.body_conv = [nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2, device=device) for i in range(self.len_num_channels_list-1)]
+        self.body_conv = nn.ModuleList([nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2) for i in range(self.len_num_channels_list-1)])
 
         self.block_length = num_channels_list[-1] - block_overlap_depth
         self.Phi_depth = self.num_blocks * self.block_length + block_overlap_depth
@@ -91,3 +91,12 @@ class cube(nn.Module):
             "block_activations": [(i, torch.norm(self.Phi[-1][:, (i)*self.block_length:(i+1)*self.block_length+self.block_overlap_depth]).item()) for i in range(self.num_blocks)],
             "shared_channel_activations": [(i, torch.norm(self.Phi[-1][:, shared_channel_idx[i]]).item()) for i in range(self.num_blocks-1)],
         }
+    
+    def load_model(self, weight_file):
+        # Load model weights
+        state_dict = torch.load(weight_file, map_location=self.device)
+        self.load_state_dict(state_dict)
+
+    def save_model(self, weight_file):
+        # Save model weights
+        torch.save(self.state_dict(), weight_file)
