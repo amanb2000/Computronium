@@ -16,6 +16,9 @@ from computronium.video_utils import async_video_loader, video_data_generator
 import pdb
 
 
+
+torch.autograd.set_detect_anomaly(True)
+
 DATA_DIR = "dataset/debug/"
 OUT_DIR = "results/debug/"
 BATCH_SIZE = 5
@@ -24,7 +27,7 @@ NUM_EPOCHS = 1000
 NUM_WORKERS = 5
 
 video_paths = glob.glob(DATA_DIR + "*.mp4")
-num_videos = 30
+num_videos = 5
 
 # if it doesn't exist, make OUT_DIR
 if not os.path.exists(OUT_DIR):
@@ -91,8 +94,9 @@ for data_np in video_data_generator(video_paths[:num_videos], batch_size=BATCH_S
     for t in range(num_timesteps-1):
         x = data[t]
         y = model(x)
-        loss += model.loss(y[:, 0:3], data[t+1])
+        loss += model.loss(y[:, 0:3], data[t+1]) / num_timesteps
 
+        model.Phi.append(model.Phi[-1] + y * model.dt)
         # save the instrumentation values 
         # inst_value = model.instrumentation_values()
         # save to OUT_DIR/instrumentation_values.txt
@@ -102,6 +106,8 @@ for data_np in video_data_generator(video_paths[:num_videos], batch_size=BATCH_S
     loss.backward()
     optimizer.step()
     losses += [loss.item()]
+
+    model.Phi = []
 
     epoch += 1
     print("Epoch: {}, Loss: {}, Batch: {}, Frames: {}".format(epoch, loss.item(), data.shape[1], data.shape[0]))
