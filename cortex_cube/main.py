@@ -22,20 +22,21 @@ import argparse
 # edit the DATA_DIR and the other constants as DATA_DIR = args.data_dir, etc.
 def parse_args():
     parser = argparse.ArgumentParser(description="Cube Cortex Video Predictive Coder")
-    parser.add_argument('--data_dir', type=str, default="dataset/debug/", help="Directory containing the dataset")
-    parser.add_argument('--out_dir', type=str, default="results/debug/", help="Directory to save results")
-    parser.add_argument('--batch_size', type=int, default=5, help="Batch size")
-    parser.add_argument('--lr', type=float, default=0.001, help="Learning rate")
-    parser.add_argument('--num_epochs', type=int, default=1000, help="Number of epochs")
-    parser.add_argument('--num_workers', type=int, default=5, help="Number of workers for data loading")
-    parser.add_argument('--video_height', type=int, default=64, help="Video height")
-    parser.add_argument('--video_width', type=int, default=64, help="Video width")
-    parser.add_argument('--kernel_size', type=int, default=3, help="Kernel size")
-    parser.add_argument('--num_channels_list', nargs='+', type=int, default=[16, 128, 16], help="List of channel numbers")
-    parser.add_argument('--num_blocks', type=int, default=3, help="Number of blocks")
-    parser.add_argument('--block_overlap_depth', type=int, default=1, help="Block overlap depth")
-    parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization")
-    parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization")
+    parser.add_argument('--data_dir', type=str, default="dataset/debug/", help="Directory containing the dataset. Default=dataset/debug/")
+    parser.add_argument('--out_dir', type=str, default="results/debug/", help="Directory to save results. Default=results/debug/")
+    parser.add_argument('--batch_size', type=int, default=5, help="Batch size. Default=5")
+    parser.add_argument('--lr', type=float, default=0.001, help="Learning rate. Default=0.001")
+    parser.add_argument('--num_epochs', type=int, default=1000, help="Number of epochs. Default=1000")
+    parser.add_argument('--num_workers', type=int, default=5, help="Number of workers for data loading. Default=5")
+    parser.add_argument('--video_height', type=int, default=64, help="Video height. Default=64")
+    parser.add_argument('--video_width', type=int, default=64, help="Video width. Default=64")
+    parser.add_argument('--kernel_size', type=int, default=3, help="Kernel size. Defualt=3")
+    parser.add_argument('--num_channels_list', nargs='+', type=int, default=[16, 128, 16], help="List of channel numbers. Defualt=[16,128,16]")
+    parser.add_argument('--num_blocks', type=int, default=3, help="Number of blocks. Default=3")
+    parser.add_argument('--block_overlap_depth', type=int, default=1, help="Block overlap depth. Default=1")
+    parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
+    parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization. Defualt=1.0")
+    parser.add_argument('--mps', action="store_true", help="Include to use mps accelerator. Default=use cuda if available, CPU if not")
     return parser.parse_args()
 
 args = parse_args()
@@ -90,9 +91,11 @@ def visualize_frames(video, num_frames=5, output_path='figures/debug_load.png'):
     plt.close()
 
 
+if not args.mps: 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+else: 
+    device = torch.device("mps:0")
 
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = torch.device("mps:0")
 
 model = cube(kernel_size=KERNEL_SIZE, num_channels_list=NUM_CHANNELS_LIST, num_blocks=NUM_BLOCKS, block_overlap_depth=BLOCK_OVERLAP_DEPTH, device=device).to(device)
 
