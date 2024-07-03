@@ -69,14 +69,11 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = cube(kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device=device).to(device)
 
 # Set up the optimizer
-model_input_convs = [conv.weight for conv in model.input_conv]
-model_body_convs = [conv.weight for conv in model.body_conv]
-model_params = model_input_convs + model_body_convs
-optimizer = optim.Adam(model_params, lr=LR)
+optimizer = optim.Adam(model.parameters(), lr=LR)
 
 # print out the model shape and number of parameters really pretty
 print(model)
-print("Number of parameters: ", sum(p.numel() for p in model_params if p.requires_grad))
+print("Number of parameters: ", sum(p.numel() for p in model.parameters()))
 
 
 # Set up data. For now we will use dummy data.
