@@ -23,7 +23,12 @@ def create_phi_batch_list(phis):
 
 class InteractiveTensorVisualization:
     def __init__(self, data, batch_idx=0):
-        """ Initialize the interactive tensor visualization. """
+        """ Initialize the interactive tensor visualization. 
+
+        args: 
+            data: list of Phi values (tensors)
+
+        """
         # Convert data to batch list
         data = create_phi_batch_list(data)
         # Extract the specific batch index
@@ -209,13 +214,27 @@ class VideoAnimationTensor:
 # tensor_data = [torch.rand(1, 64, 64, 64) for _ in range(60)]
 # Save video
 # video = VideoAnimationTensor(phis)
+
 def save_video_from_phi_list(phi_list, file_location):
     # simple black and white for now
-    frame_list_np = [frame[0].numpy() for frame in phi_list]
-    out = cv2.VideoWriter(file_location, cv2.VideoWriter_fourcc(*'mp4v'), 5, (frame_list_np[0].shape[0], frame_list_np[1].shape[0]), False)
+    frame_list_np = []
+    for frame in phi_list:
+        frame_list_np.append(frame[[2,1,0]].transpose(0,1).transpose(1,2).detach().cpu().numpy())
+    writer = cv2.VideoWriter(file_location, cv2.VideoWriter_fourcc('M','J','P','G'), 25, (frame_list_np[0].shape[0], frame_list_np[1].shape[0]), True)
     for frame in frame_list_np:
-        out.write(frame.astype(dtype='uint8'))
-    out.release()
+        writer.write((frame*255).astype('uint8'))
+    writer.release()
+
+
+
+
+
+
+
+
+
+
+
 
 # Example usage
 # a = save_video_from_phi_list(create_phi_batch_list(phis)[0], "dog.mp4")
