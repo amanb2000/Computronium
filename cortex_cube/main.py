@@ -14,9 +14,17 @@ import glob
 import json
 
 from computronium.video_utils import async_video_loader, video_data_generator
+from visualizer import create_phi_batch_list, save_video_from_phi_list
 
 import pdb
 import argparse 
+from datetime import datetime
+
+def log(msg, file_path): 
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(file_path, 'a') as f: 
+        f.write(f"[{current_time}] {msg}\n")
+
 
 # TODO: Make commandline args with defaults as below. 
 # edit the DATA_DIR and the other constants as DATA_DIR = args.data_dir, etc.
@@ -30,6 +38,7 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=5, help="Number of workers for data loading. Default=5")
     parser.add_argument('--video_height', type=int, default=64, help="Video height. Default=64")
     parser.add_argument('--video_width', type=int, default=64, help="Video width. Default=64")
+
     parser.add_argument('--kernel_size', type=int, default=3, help="Kernel size. Defualt=3")
     parser.add_argument('--num_channels_list', nargs='+', type=int, default=[16, 128, 16], help="List of channel numbers. Defualt=[16,128,16]")
     parser.add_argument('--num_blocks', type=int, default=3, help="Number of blocks. Default=3")
@@ -37,7 +46,12 @@ def parse_args():
     parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
     parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization. Defualt=1.0")
     parser.add_argument('--mps', action="store_true", help="Include to use mps accelerator. Default=use cuda if available, CPU if not")
+    parser.add_argument('--leak', type=float, default=0.0, help="Leak value for leaky state tensor, Phi *= (1-leak). Default=0, max=1")
+    parser.add_argument('--dt', type=float, default=0.1, help="Time step for the model. Default=0.1")
+
     parser.add_argument('--num_overfit_videos', type=int, default=-1, help="How many videos to use to overfit the model. Default=-1 (use all data in folder)")
+    parser.add_argument('--visualization_period', type=int, default=10, help="How training steps between each video saved to disk? Default=10")
+
     return parser.parse_args()
 
 args = parse_args()
@@ -101,7 +115,14 @@ else:
     device = torch.device("mps:0")
 
 
-model = cube(kernel_size=KERNEL_SIZE, num_channels_list=NUM_CHANNELS_LIST, num_blocks=NUM_BLOCKS, block_overlap_depth=BLOCK_OVERLAP_DEPTH, device=device).to(device)
+model = cube(
+    kernel_size=KERNEL_SIZE, 
+    num_channels_list=NUM_CHANNELS_LIST, 
+    num_blocks=NUM_BLOCKS, 
+    block_overlap_depth=BLOCK_OVERLAP_DEPTH,
+    device=device,
+    leak=args.leak, 
+    dt=args.dt).to(device)
 
 # Set up the optimizer
 optimizer = optim.Adam(model.parameters(), lr=LR)
@@ -122,6 +143,7 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
     data = torch.tensor(data_np, dtype=torch.float32).to(device)
     num_timesteps = data.shape[0]
 
+
     optimizer.zero_grad()
     loss = 0
     for t in range(num_timesteps-1):
@@ -129,20 +151,38 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
         y = model(x)
         loss += model.loss(y[:, 0:3], data[t+1], weight_regularization=WEIGHT_REGULARIZATION, activation_regularization=ACTIVITY_REGULARIZATION) / num_timesteps
 
-        model.Phi.append(model.Phi[-1] + y * model.dt)
+        model.Phi.append(model.Phi[-1]*(1-args.leak) + y * model.dt)
+        model.Phi[-1][:, 0:3] *= 0
+        model.Phi[-1][:, 0:3] += y[:, 0:3]
+        # print("predicted mean: ", y[:, 0:3].mean())
+        # print("real mean: ", data.mean())
         # save the instrumentation values 
         # inst_value = model.instrumentation_values()
         # save to OUT_DIR/instrumentation_values.txt
         # with open(OUT_DIR + f'instrumentation_values_ep{epoch}_frame{t}.txt', 'w') as f:
             # f.write(inst_value)
-    
+
+
+
     loss.backward()
     optimizer.step()
+
+    # get gradient magnitudes
+    grad_magnitudes = {}
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            grad_magnitudes[name] = param.grad.data.norm(2).item()
+    
+    # Log gradient magnitudes
+    log_message = f"Epoch {epoch}, Timestep {t}: Gradient Magnitudes - {grad_magnitudes}"
+    log(log_message, os.path.join(OUT_DIR, 'gradient_magnitudes.log'))
+
+    # log weight magnitudes
+    
+
     losses += [loss.item()]
 
-    model.Phi = []
 
-    epoch += 1
     print("Epoch: {}, Loss: {}, Batch: {}, Frames: {}".format(epoch, loss.item(), data.shape[1], data.shape[0]))
     if loss.item() < best_loss:
         print("Saving best model weights at ", model_output_path, "...")
@@ -150,6 +190,16 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
         model.save_model(model_output_path)
         print("Model saved.\n")
         # todo: add validation set, etc. 
+
+    if epoch % args.visualization_period == 0: 
+        vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.mp4")
+        print("Saving visualization to ", vis_path)
+        batch_0_tmp = create_phi_batch_list(model.Phi)[0] # take the 0th batch
+        save_video_from_phi_list(batch_0_tmp, vis_path)
+        print("Done!")
+
+    model.Phi = []
+    epoch += 1
 
     if epoch > NUM_EPOCHS:
         break
