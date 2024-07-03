@@ -3,7 +3,7 @@ import torch.nn as nn
 import pdb
 
 class cube(nn.Module):
-    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu", dt=0.1):
+    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu", dt=0.1, leak=0):
         super(cube, self).__init__()
         if num_channels_list[0] != num_channels_list[-1]:
             raise ValueError("First and last number of kernels must be the same")
@@ -24,6 +24,7 @@ class cube(nn.Module):
 
         self.Phi = [] 
         self.dt = dt
+        self.leak = leak
 
     def forward(self, x):
         batch_size = x.shape[0] # N, batch_size
