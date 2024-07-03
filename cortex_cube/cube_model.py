@@ -3,7 +3,7 @@ import torch.nn as nn
 import pdb
 
 class cube(nn.Module):
-    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu"):
+    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu", dt=0.1):
         super(cube, self).__init__()
         if num_channels_list[0] != num_channels_list[-1]:
             raise ValueError("First and last number of kernels must be the same")
@@ -22,7 +22,8 @@ class cube(nn.Module):
         self.block_length = num_channels_list[-1] - block_overlap_depth
         self.Phi_depth = self.num_blocks * self.block_length + block_overlap_depth
 
-        self.Phi = None
+        self.Phi = [] 
+        self.dt = dt
 
     def forward(self, x):
         batch_size = x.shape[0] # N, batch_size
@@ -31,11 +32,11 @@ class cube(nn.Module):
         m = x.shape[2] # Width of video frame
         n = x.shape[3] # Height of video frame
 
-        if self.Phi is None:
-            self.Phi = torch.zeros(batch_size, self.Phi_depth, m, n).to(self.device)
+        if len(self.Phi) == 0:
+            self.Phi.append(torch.zeros(batch_size, self.Phi_depth, m, n).to(self.device))
 
         input_block_depth = self.num_channels_list[-1]
-        dPhidt_input = torch.cat((x, self.Phi[:, 3:input_block_depth]), dim=1)
+        dPhidt_input = torch.cat((x, self.Phi[-1][:, 3:input_block_depth]), dim=1)
 
         for input_conv in self.input_conv:
             dPhidt_input = input_conv(dPhidt_input)
@@ -44,7 +45,7 @@ class cube(nn.Module):
 
         # dPhidt_input should now be (N, input_block_depth, m, n)
         
-        dPhidt_body_list = [self.Phi[:, (i+1)*(self.block_length):(i+2)*(self.block_length)+self.block_overlap_depth] for i in range(self.num_blocks-1)]
+        dPhidt_body_list = [self.Phi[-1][:, (i+1)*(self.block_length):(i+2)*(self.block_length)+self.block_overlap_depth] for i in range(self.num_blocks-1)]
         
         for block in range(self.num_blocks-1):
             for body_conv in self.body_conv:
@@ -54,7 +55,7 @@ class cube(nn.Module):
         
         # dPhidt_body_list should now be a list of length num_blocks-1, of tensors shape (N, block_length, m, n)
 
-        dPhidt = torch.zeros_like(self.Phi)
+        dPhidt = torch.zeros_like(self.Phi[-1])
         dPhidt[:, 0:input_block_depth] += dPhidt_input
         for block in range(self.num_blocks-1):
             dPhidt[:, (block+1)*self.block_length:(block+2)*self.block_length+self.block_overlap_depth] += dPhidt_body_list[block]
@@ -80,13 +81,13 @@ class cube(nn.Module):
         activation_reg = 0
         shared_channel_idx = torch.tensor([(i+1)*self.block_length + j for i in range(self.num_blocks-1) for j in range(self.block_overlap_depth)])
         #print("Check shared_channel_idx")
-        activation_reg += torch.mean(self.Phi[:, shared_channel_idx])**2
+        activation_reg += torch.mean(self.Phi[-1][:, shared_channel_idx])**2
 
         return MSE + weight_regularization*weight_reg + activation_regularization*activation_reg
 
     def instrumentation_values(self):
         shared_channel_idx = torch.tensor([(i+1)*self.block_length + j for i in range(self.num_blocks-1) for j in range(self.block_overlap_depth)])
         return {
-            "block_activations": [(i, torch.norm(self.Phi[:, (i)*self.block_length:(i+1)*self.block_length+self.block_overlap_depth]).item()) for i in range(self.num_blocks)],
-            "shared_channel_activations": [(i, torch.norm(self.Phi[:, shared_channel_idx[i]]).item()) for i in range(self.num_blocks-1)],
+            "block_activations": [(i, torch.norm(self.Phi[-1][:, (i)*self.block_length:(i+1)*self.block_length+self.block_overlap_depth]).item()) for i in range(self.num_blocks)],
+            "shared_channel_activations": [(i, torch.norm(self.Phi[-1][:, shared_channel_idx[i]]).item()) for i in range(self.num_blocks-1)],
         }
