@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
     parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization. Defualt=1.0")
     parser.add_argument('--mps', action="store_true", help="Include to use mps accelerator. Default=use cuda if available, CPU if not")
+    parser.add_argument('--num_overfit_videos', type=int, default=-1, help="How many videos to use to overfit the model. Default=-1 (use all data in folder)")
     return parser.parse_args()
 
 args = parse_args()
@@ -61,6 +62,9 @@ ACTIVITY_REGULARIZATION = args.activity_regularization
 
 
 video_paths = glob.glob(DATA_DIR + "*.mp4")
+if args.num_overfit_videos > 0: 
+    video_paths = video_paths[:args.num_overfit_videos]
+print("Length of video paths: ", len(video_paths))
 
 model_output_path = os.path.join(OUT_DIR, 'best_model.pth')
 

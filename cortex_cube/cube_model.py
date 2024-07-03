@@ -60,6 +60,9 @@ class cube(nn.Module):
         for block in range(self.num_blocks-1):
             dPhidt[:, (block+1)*self.block_length:(block+2)*self.block_length+self.block_overlap_depth] += dPhidt_body_list[block]
 
+        # Add 1 and divide by 2 for dPhidt[:, :3] 
+        dPhidt[:, :3] = 0.5 * (dPhidt[:, :3] + 1)
+
         return dPhidt
     
     def loss(self, y, y_pred, weight_regularization=0.01, activation_regularization=0.01):
