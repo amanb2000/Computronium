@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument('--block_overlap_depth', type=int, default=1, help="Block overlap depth. Default=1")
     parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
     parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization. Defualt=1.0")
+    parser.add_argument('--sparsity_frac', type=float, default=0.99, help="Sparsity fraction for frames input to model. Default=0.99")
     parser.add_argument('--mps', action="store_true", help="Include to use mps accelerator. Default=use cuda if available, CPU if not")
     parser.add_argument('--leak', type=float, default=0.0, help="Leak value for leaky state tensor, Phi *= (1-leak). Default=0, max=1")
     parser.add_argument('--dt', type=float, default=0.1, help="Time step for the model. Default=0.1")
@@ -149,7 +150,11 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
     for t in range(num_timesteps-1):
         x = data[t]
         y = model(x)
-        loss += model.loss(y[:, 0:3], data[t+1], weight_regularization=WEIGHT_REGULARIZATION, activation_regularization=ACTIVITY_REGULARIZATION) / num_timesteps
+
+        loss += model.loss(y[:, 0:3], 
+                           data[t+1], 
+                           weight_regularization=WEIGHT_REGULARIZATION, 
+                           activation_regularization=ACTIVITY_REGULARIZATION) / num_timesteps
 
         model.Phi.append(model.Phi[-1]*(1-args.leak) + y * model.dt)
         model.Phi[-1][:, 0:3] *= 0
@@ -183,7 +188,10 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
     losses += [loss.item()]
 
 
-    print("Epoch: {}, Loss: {}, Batch: {}, Frames: {}".format(epoch, loss.item(), data.shape[1], data.shape[0]))
+    lg_str = "Epoch: {} Loss: {} Batch: {} Frames: {}".format(epoch, loss.item(), data.shape[1], data.shape[0])
+    print(lg_str)
+    log(lg_str, os.path.join(OUT_DIR, 'loss.log'))
+
     if loss.item() < best_loss:
         print("Saving best model weights at ", model_output_path, "...")
         best_loss = loss.item()
@@ -191,8 +199,10 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
         print("Model saved.\n")
         # todo: add validation set, etc. 
 
+    # logg the epoch and loss 
+
     if epoch % args.visualization_period == 0: 
-        vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.mp4")
+        vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.avi")
         print("Saving visualization to ", vis_path)
         batch_0_tmp = create_phi_batch_list(model.Phi)[0] # take the 0th batch
         save_video_from_phi_list(batch_0_tmp, vis_path)
