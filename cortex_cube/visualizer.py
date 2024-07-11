@@ -217,13 +217,19 @@ class VideoAnimationTensor:
 
 def save_video_from_phi_list(phi_list, file_location):
     # simple black and white for now
-    frame_list_np = []
-    for frame in phi_list:
-        frame_list_np.append(frame[[2,1,0]].transpose(0,1).transpose(1,2).detach().cpu().numpy())
-    writer = cv2.VideoWriter(file_location, cv2.VideoWriter_fourcc('M','J','P','G'), 25, (frame_list_np[0].shape[0], frame_list_np[1].shape[0]), True)
+    frame_list_np = [frame[0].detach().cpu().numpy() for frame in phi_list]
+    out = cv2.VideoWriter(file_location, cv2.VideoWriter_fourcc(*'mp4v'), 5, (frame_list_np[0].shape[0], frame_list_np[1].shape[0]), False)
     for frame in frame_list_np:
-        writer.write((frame*255).astype('uint8'))
-    writer.release()
+        frame -= frame.min()
+        frame /= frame.max()
+        out.write((frame * 255).astype(dtype='uint8'))
+    out.release()
+
+
+
+
+
+
 
 
 
