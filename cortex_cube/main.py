@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument('--mps', action="store_true", help="Include to use mps accelerator. Default=use cuda if available, CPU if not")
     parser.add_argument('--leak', type=float, default=0.0, help="Leak value for leaky state tensor, Phi *= (1-leak). Default=0, max=1")
     parser.add_argument('--dt', type=float, default=0.1, help="Time step for the model. Default=0.1")
+    parser.add_argument('--num_steps_per_frame', type=int, default=1, help="Number of steps per frame. Default=1")
 
     parser.add_argument('--num_overfit_videos', type=int, default=-1, help="How many videos to use to overfit the model. Default=-1 (use all data in folder)")
     parser.add_argument('--visualization_period', type=int, default=10, help="How training steps between each video saved to disk? Default=10")
@@ -149,16 +150,17 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
     loss = 0
     for t in range(num_timesteps-1):
         x = data[t]
-        y = model(x)
+        for subtimestep in range(args.num_steps_per_frame): 
+            y = model(x)
+
+            model.Phi.append(model.Phi[-1]*(1-args.leak) + y * model.dt)
+            model.Phi[-1][:, 0:3] *= 0 # zero out the first 3 channels in the prediction layer
+            model.Phi[-1][:, 0:3] += y[:, 0:3] # set the first 3 channels to the absolute prediction (non-differential)
 
         loss += model.loss(y[:, 0:3], 
                            data[t+1], 
                            weight_regularization=WEIGHT_REGULARIZATION, 
                            activation_regularization=ACTIVITY_REGULARIZATION) / num_timesteps
-
-        model.Phi.append(model.Phi[-1]*(1-args.leak) + y * model.dt)
-        model.Phi[-1][:, 0:3] *= 0
-        model.Phi[-1][:, 0:3] += y[:, 0:3]
         # print("predicted mean: ", y[:, 0:3].mean())
         # print("real mean: ", data.mean())
         # save the instrumentation values 
