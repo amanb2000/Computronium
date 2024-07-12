@@ -26,6 +26,7 @@ class cube(nn.Module):
 
         self.Phi = [] 
         self.dt = dt
+        self.length = length
         self.leak = leak
         self.sparsity_frac = sparsity_frac
 
