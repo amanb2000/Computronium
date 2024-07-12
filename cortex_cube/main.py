@@ -21,6 +21,8 @@ import argparse
 from datetime import datetime
 from scipy.stats import pearsonr
 
+from tqdm import tqdm 
+
 def log(msg, file_path): 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(file_path, 'a') as f: 
@@ -32,6 +34,9 @@ def log(msg, file_path):
 def parse_args():
     parser = argparse.ArgumentParser(description="Cube Cortex Video Predictive Coder")
     parser.add_argument('--data_dir', type=str, default="dataset/debug/", help="Directory containing the dataset. Default=dataset/debug/")
+    parser.add_argument('--val_dir', type=str, default="dataset/debug/", help="Directory containing the validation dataset. Default=dataset/debug/")
+    parser.add_argument('--val_period', type=int, default=10, help="How many batches between each validation run? Default=10")
+
     parser.add_argument('--out_dir', type=str, default="results/debug/", help="Directory to save results. Default=results/debug/")
     parser.add_argument('--batch_size', type=int, default=5, help="Batch size. Default=5")
     parser.add_argument('--lr', type=float, default=0.001, help="Learning rate. Default=0.001")
@@ -51,7 +56,7 @@ def parse_args():
     parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization. Defualt=1.0")
     parser.add_argument('--sparsity_frac', type=float, default=0.99, help="Sparsity fraction for frames input to model. Default=0.99")
     parser.add_argument('--mps', action="store_true", help="Include to use mps accelerator. Default=use cuda if available, CPU if not")
-    parser.add_argument('--leak', type=float, default=0.0, help="Leak value for leaky state tensor, Phi *= (1-leak). Default=0, max=1")
+    parser.add_argument('--leak', type=float, default=0.1, help="Leak value for leaky state tensor, Phi *= (1-leak). Default=0, max=1")
     parser.add_argument('--dt', type=float, default=0.1, help="Time step for the model. Default=0.1")
     parser.add_argument('--num_steps_per_frame', type=int, default=1, help="Number of steps per frame. Default=1")
 
@@ -82,13 +87,21 @@ BLOCK_OVERLAP_DEPTH = args.block_overlap_depth
 WEIGHT_REGULARIZATION = args.weight_regularization
 ACTIVITY_REGULARIZATION = args.activity_regularization
 
-
+# make the out_dir if it doesn't already exist 
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
 
 
 video_paths = glob.glob(os.path.join(DATA_DIR, "*.mp4"))
 if args.num_overfit_videos > 0: 
     video_paths = video_paths[:args.num_overfit_videos]
 print("Length of video paths: ", len(video_paths))
+log("Length of video paths: " + str(len(video_paths)), os.path.join(OUT_DIR, 'loss.log'))
+
+# get the set of validation set paths 
+val_paths = glob.glob(os.path.join(args.val_dir, "*.mp4"))
+print("Length of validation paths: ", len(val_paths))
+log("Length of validation paths: " + str(len(val_paths)), os.path.join(OUT_DIR, 'loss.log'))
 
 model_output_path = os.path.join(OUT_DIR, 'best_model.pth')
 
@@ -123,7 +136,8 @@ if not args.mps:
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 else: 
     device = torch.device("mps:0")
-
+print("Device: ", device)
+log("Device: " + str(device), os.path.join(OUT_DIR, 'loss.log'))
 
 model = cube(
     kernel_size=KERNEL_SIZE, 
@@ -143,14 +157,23 @@ print(model)
 print("Number of parameters: ", sum(p.numel() for p in model.parameters()))
 
 
-# Set up data. For now we will use dummy data.
-# data = torch.tensor(batch_data_np, dtype=torch.float32).to(device)
-
-losses = []
-# for epoch in range(NUM_EPOCHS):
-epoch = 0
-best_loss = 1000000
-for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, rescale=[VIDEO_HEIGHT, VIDEO_WIDTH], float01=True): 
+# Function to call model on a numpy array of video frames, update the Phi tensor list 
+# for a certain 
+def get_loss_on_video_batch(data_np: np.ndarray, 
+                            model: cube, 
+                            num_steps_per_frame: int, 
+                            weight_regularization: float, 
+                            activity_regularization: float, 
+                            instrument_correlations=True,
+                            ):
+    """
+    Computes the loss of the model on a given dataset of videos 
+    data_np of shape [frames, batch, rgb, width, height]
+    Notes: 
+        Zero the optimizer gradient beforehand 
+        Use with torch.no_grad() to avoid grad comp on the val set
+    Args: 
+    """
     data = torch.tensor(data_np, dtype=torch.float32).to(device)
     num_timesteps = data.shape[0]
 
@@ -159,8 +182,8 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
     loss = 0
     for t in range(num_timesteps-1):
         x = data[t]
-        for subtimestep in range(args.num_steps_per_frame): 
-            y = model(x)
+        for subtimestep in range(num_steps_per_frame): 
+            y = model(x, instrument_correlations=instrument_correlations)
 
             model.Phi.append(model.Phi[-1]*(1-args.leak) + y * model.dt)
             model.Phi[-1][:, 0:3] *= 0 # zero out the first 3 channels in the prediction layer
@@ -168,8 +191,8 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
 
         loss += model.loss(data[t+1],
                            y[:, 0:3], 
-                           weight_regularization=WEIGHT_REGULARIZATION, 
-                           activation_regularization=ACTIVITY_REGULARIZATION) / num_timesteps
+                           weight_regularization=weight_regularization, 
+                           activation_regularization=activity_regularization) / num_timesteps
         # print("predicted mean: ", y[:, 0:3].mean())
         # print("real mean: ", data.mean())
         # save the instrumentation values 
@@ -177,7 +200,9 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
         # save to OUT_DIR/instrumentation_values.txt
         # with open(OUT_DIR + f'instrumentation_values_ep{epoch}_frame{t}.txt', 'w') as f:
             # f.write(inst_value)
+    return loss
 
+def compute_correlation_tensor(model, epoch):
     correlation_tensor_actuallyatensornow = torch.cat([a[None, :] for a in model.correlation_tensor])
     # Shape is (timesteps, N, num_blocks-1, block_overlap_depth, m, n, 2)
 
@@ -190,7 +215,7 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
 
     # Compute how correlated cor_tensor_flattened[0] is with cor_tensor_flattened[1] (pearson correlation coefficient)
     correlations = []
-    for i in range(cor_tensor_flattened.shape[0]):
+    for i in tqdm(range(cor_tensor_flattened.shape[0])):
         cor = pearsonr(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1])
         
         correlations.append(cor.statistic)
@@ -200,15 +225,14 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
         print(f"Block Junction {i}: {cor}")
 
     # Plot a random 1% of the correlations, with trendline
-    plt.scatter(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1], s=0.01)
+    plt.scatter(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1], s=0.005, alpha=0.5)
     
     # save figure
-    plt.savefig(os.path.join(OUT_DIR, f'correlation_scatter_ep{epoch}_frame{t}.png'))
-    pdb.set_trace()
+    plt.savefig(os.path.join(OUT_DIR, f'correlation_scatter_ep{epoch}.png'))
+    # clear figure for next time 
+    plt.clf()
 
-    loss.backward()
-    optimizer.step()
-
+def log_grad_magnitudes(model, OUT_DIR): 
     # get gradient magnitudes
     grad_magnitudes = {}
     for name, param in model.named_parameters():
@@ -216,36 +240,97 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
             grad_magnitudes[name] = param.grad.data.norm(2).item()
     
     # Log gradient magnitudes
-    log_message = f"Epoch {epoch}, Timestep {t}: Gradient Magnitudes - {grad_magnitudes}"
+    log_message = f"Epoch {epoch}: Gradient Magnitudes - {grad_magnitudes}"
     log(log_message, os.path.join(OUT_DIR, 'gradient_magnitudes.log'))
 
-    # log weight magnitudes
-    
+
+
+
+losses = []
+val_losses = []
+# for epoch in range(NUM_EPOCHS):
+epoch = 0
+best_loss = 1000000
+for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, rescale=[VIDEO_HEIGHT, VIDEO_WIDTH], float01=True): 
+    # get the loss on data_np of shape [timesteps, batch_size, height, width, channels]
+    log("Starting get_loss_on_video_batch...", os.path.join(OUT_DIR, 'loss.log'))
+    loss = get_loss_on_video_batch(data_np, model, args.num_steps_per_frame, WEIGHT_REGULARIZATION, ACTIVITY_REGULARIZATION, instrument_correlations=False) 
+    log("Done get_loss_on_video_batch.", os.path.join(OUT_DIR, 'loss.log'))
+
+    log("Performing gradient step...", os.path.join(OUT_DIR, 'loss.log'))
+    loss.backward()
+    optimizer.step()
+    log("Done gradient step.", os.path.join(OUT_DIR, 'loss.log'))
+
+    # compute the correlation tensor
+    # log("Starting computation of correlation tensor...", os.path.join(OUT_DIR, 'loss.log'))
+    # compute_correlation_tensor(model, epoch) 
+    # log("Done computing correlation tensors.", os.path.join(OUT_DIR, 'loss.log'))
+
+    log("Logging gradient magnitudes...", os.path.join(OUT_DIR, 'loss.log'))
+    log_grad_magnitudes(model, OUT_DIR) 
+    log("Done logging gradient magnitudes.", os.path.join(OUT_DIR, 'loss.log'))
 
     losses += [loss.item()]
 
 
-    lg_str = "Epoch: {} Loss: {} Batch: {} Frames: {}".format(epoch, loss.item(), data.shape[1], data.shape[0])
+    lg_str = "Epoch: {} Loss: {} Batch: {} Frames: {}".format(epoch, loss.item(), data_np.shape[1], data_np.shape[0])
     print(lg_str)
     log(lg_str, os.path.join(OUT_DIR, 'loss.log'))
 
-    if loss.item() < best_loss:
-        print("Saving best model weights at ", model_output_path, "...")
-        best_loss = loss.item()
-        model.save_model(model_output_path)
-        print("Model saved.\n")
-        # todo: add validation set, etc. 
 
-    # logg the epoch and loss 
+    # TODO: add validation set, etc. 
+    # compute validation loss
+    if epoch % args.val_period == 0:
+        log("Computing validation loss...", os.path.join(OUT_DIR, 'loss.log'))
+        with torch.no_grad(): 
+            total_val_loss = 0
+            cnt = 0
+            for data_np_val in tqdm(video_data_generator(val_paths, 
+                                                    batch_size=BATCH_SIZE, 
+                                                    num_workers=NUM_WORKERS, 
+                                                    rescale=[VIDEO_HEIGHT, VIDEO_WIDTH], 
+                                                    float01=True)):
+                model.Phi = []
+                model.correlation_tensor = []
+                val_loss = get_loss_on_video_batch(data_np_val, model, args.num_steps_per_frame, WEIGHT_REGULARIZATION, ACTIVITY_REGULARIZATION)
+                total_val_loss += val_loss.item()
+                cnt += 1
+
+                if cnt > (len(val_paths) // BATCH_SIZE) + 1: 
+                    break
+        log('Done computing validation loss.', os.path.join(OUT_DIR, 'loss.log'))
+        
+        # compute the correlation tensor
+        log("Starting computation of correlation tensor...", os.path.join(OUT_DIR, 'loss.log'))
+        compute_correlation_tensor(model, epoch) 
+        log("Done computing correlation tensors.", os.path.join(OUT_DIR, 'loss.log'))
+
+        mean_val_loss = total_val_loss / cnt
+        val_losses.append(mean_val_loss)
+        log("Validation loss: " + str(mean_val_loss), os.path.join(OUT_DIR, 'loss.log'))
+
+
+        if mean_val_loss < best_loss:
+            print("Saving best model weights at ", model_output_path, "...")
+            log("Saving best model weights at " + model_output_path + "...", os.path.join(OUT_DIR, 'loss.log'))
+            best_loss = mean_val_loss 
+            model.save_model(model_output_path)
+            print("Model saved.\n")
+            log("Model saved.", os.path.join(OUT_DIR, 'loss.log'))
+
 
     if epoch % args.visualization_period == 0: 
+        log("Starting visualization...", os.path.join(OUT_DIR, 'loss.log'))
         vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.avi")
         print("Saving visualization to ", vis_path)
         batch_0_tmp = create_phi_batch_list(model.Phi)[0] # take the 0th batch
         save_video_from_phi_list(batch_0_tmp, vis_path)
         print("Done!")
+        log("Done visualizing.", os.path.join(OUT_DIR, 'loss.log'))
 
     model.Phi = []
+    model.correlation_tensor = []
     epoch += 1
 
     if epoch > NUM_EPOCHS:
