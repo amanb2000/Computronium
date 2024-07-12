@@ -5,7 +5,23 @@ import torch.nn.functional as F
 
 
 class cube(nn.Module):
-    def __init__(self, kernel_size=3, length=64, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu", dt=0.1, leak=0, sparsity_frac=0.99):
+    def __init__(self, 
+                 kernel_size=3, 
+                 length=64, 
+                 num_channels_list=[16, 128, 16], 
+                 num_blocks=3, 
+                 block_overlap_depth=1, 
+                 device="cpu", 
+                 dt=0.1, 
+                 leak=0, 
+                 sparsity_frac=0.99):
+        """
+        args: 
+            ...
+            length: 
+                augmentation to the height of the Phi tensor (must be larger 
+                than the video frame).
+        """
         super(cube, self).__init__()
         if num_channels_list[0] != num_channels_list[-1]:
             raise ValueError("First and last number of kernels must be the same")
@@ -49,8 +65,8 @@ class cube(nn.Module):
         c = x.shape[1] # Number of channels
         assert c == 3, "Input tensor must have 3 channels (RGB)"
         
-        assert self.width >= x.shape[2]
-        m = self.width
+        assert self.length >= x.shape[2]
+        m = self.length
         n = x.shape[3] # Height of video frame
 
         if len(self.Phi) == 0:
@@ -96,7 +112,7 @@ class cube(nn.Module):
         m = y.shape[2] # Width of video frame
         n = y.shape[3] # Height of video frame
 
-        MSE = torch.mean((y - y_pred)**2)
+        MSE = torch.mean((y - y_pred[:, :, :m, :])**2)
 
         # Weight regularization
         weight_reg = 0

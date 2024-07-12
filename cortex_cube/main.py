@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument('--num_channels_list', nargs='+', type=int, default=[16, 128, 16], help="List of channel numbers. Defualt=[16,128,16]")
 
     parser.add_argument('--num_blocks', type=int, default=3, help="Number of blocks. Default=3")
-    parser.add_argument('--length', type=int, default=64, help="Number of blocks. Default=3")
+    parser.add_argument('--length', type=int, default=128, help="Extra length on Phi tensor. Default=128")
 
     parser.add_argument('--block_overlap_depth', type=int, default=1, help="Block overlap depth. Default=1")
     parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
@@ -84,7 +84,7 @@ ACTIVITY_REGULARIZATION = args.activity_regularization
 
 
 
-video_paths = glob.glob(DATA_DIR + "*.mp4")
+video_paths = glob.glob(os.path.join(DATA_DIR, "*.mp4"))
 if args.num_overfit_videos > 0: 
     video_paths = video_paths[:args.num_overfit_videos]
 print("Length of video paths: ", len(video_paths))
@@ -165,8 +165,8 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
             model.Phi[-1][:, 0:3] *= 0 # zero out the first 3 channels in the prediction layer
             model.Phi[-1][:, 0:3] += y[:, 0:3] # set the first 3 channels to the absolute prediction (non-differential)
 
-        loss += model.loss(y[:, 0:3], 
-                           data[t+1], 
+        loss += model.loss(data[t+1],
+                           y[:, 0:3], 
                            weight_regularization=WEIGHT_REGULARIZATION, 
                            activation_regularization=ACTIVITY_REGULARIZATION) / num_timesteps
         # print("predicted mean: ", y[:, 0:3].mean())
