@@ -27,7 +27,17 @@ class cube(nn.Module):
         self.leak = leak
         self.sparsity_frac = sparsity_frac
 
-    def forward(self, x_):
+    def forward(self, x_, instrument_correlations=True):
+        """
+        args: 
+            x_: 
+                input tensor of shape (N, 3, m, n)
+            instrument_correlations:
+                whether to compute the correlation between the shared channels
+        returns:
+            dPhidt: 
+                tensor of shape (N, self.Phi_depth, m, n)
+        """
         # make a mask with sparsity_frac of the values being 1
         mask = torch.rand_like(x_) > self.sparsity_frac
         x = x_ * mask
