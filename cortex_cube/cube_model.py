@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import pdb
+import torch.nn.functional as F
+
 
 class cube(nn.Module):
-    def __init__(self, kernel_size=3, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu", dt=0.1, leak=0, sparsity_frac=0.99):
+    def __init__(self, kernel_size=3, length=64, num_channels_list=[16, 128, 16], num_blocks=3, block_overlap_depth=1, device="cpu", dt=0.1, leak=0, sparsity_frac=0.99):
         super(cube, self).__init__()
         if num_channels_list[0] != num_channels_list[-1]:
             raise ValueError("First and last number of kernels must be the same")
@@ -45,14 +47,20 @@ class cube(nn.Module):
         batch_size = x.shape[0] # N, batch_size
         c = x.shape[1] # Number of channels
         assert c == 3, "Input tensor must have 3 channels (RGB)"
-        m = x.shape[2] # Width of video frame
+        
+        assert self.width >= x.shape[2]
+        m = self.width
         n = x.shape[3] # Height of video frame
 
         if len(self.Phi) == 0:
             self.Phi.append(torch.zeros(batch_size, self.Phi_depth, m, n).to(self.device))
 
         input_block_depth = self.num_channels_list[-1]
-        dPhidt_input = torch.cat((x, self.Phi[-1][:, 3:input_block_depth]), dim=1)
+
+        # pad x
+        x_padded = F.pad(x, (0,0,0, self.Phi[-1].shape[-2]-x.shape[-2]), mode='constant', value=0)
+
+        dPhidt_input = torch.cat((x_padded, self.Phi[-1][:, 3:input_block_depth]), dim=1)
 
         for input_conv in self.input_conv:
             dPhidt_input = input_conv(dPhidt_input)

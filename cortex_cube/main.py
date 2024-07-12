@@ -41,7 +41,10 @@ def parse_args():
 
     parser.add_argument('--kernel_size', type=int, default=3, help="Kernel size. Defualt=3")
     parser.add_argument('--num_channels_list', nargs='+', type=int, default=[16, 128, 16], help="List of channel numbers. Defualt=[16,128,16]")
+
     parser.add_argument('--num_blocks', type=int, default=3, help="Number of blocks. Default=3")
+    parser.add_argument('--length', type=int, default=64, help="Number of blocks. Default=3")
+
     parser.add_argument('--block_overlap_depth', type=int, default=1, help="Block overlap depth. Default=1")
     parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
     parser.add_argument('--activity_regularization', type=float, default=1.0, help="Activity regularization. Defualt=1.0")
@@ -56,7 +59,10 @@ def parse_args():
 
     return parser.parse_args()
 
+
 args = parse_args()
+assert args.length >= args.video_width
+
 
 # Use the parsed arguments
 DATA_DIR = args.data_dir
@@ -70,6 +76,7 @@ VIDEO_WIDTH = args.video_width
 KERNEL_SIZE = args.kernel_size
 NUM_CHANNELS_LIST = args.num_channels_list
 NUM_BLOCKS = args.num_blocks
+LENGTH = args.length
 BLOCK_OVERLAP_DEPTH = args.block_overlap_depth
 WEIGHT_REGULARIZATION = args.weight_regularization
 ACTIVITY_REGULARIZATION = args.activity_regularization
@@ -119,11 +126,12 @@ else:
 
 model = cube(
     kernel_size=KERNEL_SIZE, 
+    length=LENGTH,
     num_channels_list=NUM_CHANNELS_LIST, 
     num_blocks=NUM_BLOCKS, 
     block_overlap_depth=BLOCK_OVERLAP_DEPTH,
     device=device,
-    leak=args.leak, 
+    leak=args.leak,
     dt=args.dt).to(device)
 
 # Set up the optimizer
