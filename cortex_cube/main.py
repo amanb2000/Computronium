@@ -19,6 +19,7 @@ from visualizer import create_phi_batch_list, save_video_from_phi_list
 import pdb
 import argparse 
 from datetime import datetime
+from scipy.stats import pearsonr
 
 def log(msg, file_path): 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -177,7 +178,33 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
         # with open(OUT_DIR + f'instrumentation_values_ep{epoch}_frame{t}.txt', 'w') as f:
             # f.write(inst_value)
 
+    correlation_tensor_actuallyatensornow = torch.cat([a[None, :] for a in model.correlation_tensor])
+    # Shape is (timesteps, N, num_blocks-1, block_overlap_depth, m, n, 2)
 
+    # Flatten the correlation tensor to be (num_blocks-1, timesteps*Nblock_overlap_depth*m*n, 2)
+    # First permute
+    cor_tensor_permuted = correlation_tensor_actuallyatensornow.permute(2, 0, 1, 3, 4, 5, 6)
+
+    # Then reshape. Final shape is (num_blocks-1, timesteps*Nblock_overlap_depth*m*n, 2)
+    cor_tensor_flattened = cor_tensor_permuted.reshape(cor_tensor_permuted.shape[0], -1, 2).detach().cpu().numpy()
+
+    # Compute how correlated cor_tensor_flattened[0] is with cor_tensor_flattened[1] (pearson correlation coefficient)
+    correlations = []
+    for i in range(cor_tensor_flattened.shape[0]):
+        cor = pearsonr(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1])
+        
+        correlations.append(cor.statistic)
+
+    print("Correlations of layer overlap, measuring mutual inhibition.")
+    for i, cor in enumerate(correlations):
+        print(f"Block Junction {i}: {cor}")
+
+    # Plot a random 1% of the correlations, with trendline
+    plt.scatter(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1], s=0.01)
+    
+    # save figure
+    plt.savefig(os.path.join(OUT_DIR, f'correlation_scatter_ep{epoch}_frame{t}.png'))
+    pdb.set_trace()
 
     loss.backward()
     optimizer.step()

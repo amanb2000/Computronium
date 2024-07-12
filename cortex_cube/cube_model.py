@@ -46,6 +46,8 @@ class cube(nn.Module):
         self.leak = leak
         self.sparsity_frac = sparsity_frac
 
+        self.correlation_tensor = []
+
     def forward(self, x_, instrument_correlations=True):
         """
         args: 
@@ -69,6 +71,9 @@ class cube(nn.Module):
         m = self.length
         n = x.shape[3] # Height of video frame
 
+        if instrument_correlations:
+            correlation_tensor_t = torch.zeros(batch_size, self.num_blocks-1, self.block_overlap_depth, m, n, 2).to(self.device)
+
         if len(self.Phi) == 0:
             self.Phi.append(torch.zeros(batch_size, self.Phi_depth, m, n).to(self.device))
 
@@ -77,13 +82,18 @@ class cube(nn.Module):
         # pad x
         x_padded = F.pad(x, (0,0,0, self.Phi[-1].shape[-2]-x.shape[-2]), mode='constant', value=0)
 
-        dPhidt_input = torch.cat((x_padded, self.Phi[-1][:, 3:input_block_depth]), dim=1)
+        dPhidt_input = torch.cat((x_padded, self.Phi[-1][:, 3:input_block_depth]), dim=1) # shape is (N, input_block_depth, m, n)
+
+    
 
         for input_conv in self.input_conv:
             dPhidt_input = input_conv(dPhidt_input)
             dPhidt_input = torch.tanh(dPhidt_input)
             # maybe nonlinearity here
 
+        if instrument_correlations:
+            input_shared_idx = torch.tensor([self.block_length + j for j in range(self.block_overlap_depth)])
+            correlation_tensor_t[:, 0, :, :, :, 0] = dPhidt_input[:, input_shared_idx]
         # dPhidt_input should now be (N, input_block_depth, m, n)
         
         dPhidt_body_list = [self.Phi[-1][:, (i+1)*(self.block_length):(i+2)*(self.block_length)+self.block_overlap_depth] for i in range(self.num_blocks-1)]
@@ -92,8 +102,17 @@ class cube(nn.Module):
             for body_conv in self.body_conv:
                 dPhidt_body_list[block] = body_conv(dPhidt_body_list[block])
                 dPhidt_body_list[block] = torch.tanh(dPhidt_body_list[block])
-                # maybe nonlinearity here
+
+                if instrument_correlations:
+                    # The bottom of Body 1 (diagram in notebook) is going to the top of correlation_tensor_t at block 0
+                    correlation_tensor_t[:, block, :, :, :, 1] = dPhidt_body_list[block][:, :self.block_overlap_depth]
+
+                    # The top of Body 1 is going to the bottom of correlation_tensor_t at block 0
+                    if block < self.num_blocks-2:
+                        correlation_tensor_t[:, block+1, :, :, :, 0] = dPhidt_body_list[block][:, -self.block_overlap_depth:]
         
+        if instrument_correlations:
+            self.correlation_tensor.append(correlation_tensor_t)
         # dPhidt_body_list should now be a list of length num_blocks-1, of tensors shape (N, block_length, m, n)
 
         dPhidt = torch.zeros_like(self.Phi[-1])
