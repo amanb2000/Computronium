@@ -214,20 +214,37 @@ class VideoAnimationTensor:
 # tensor_data = [torch.rand(1, 64, 64, 64) for _ in range(60)]
 # Save video
 # video = VideoAnimationTensor(phis)
-
-def save_video_from_phi_list(phi_list, file_location):
+def save_video_from_phi_list(phi_list, file_location, fps=30, width=24, height=24, pixelnorm='rescale'):
     # simple black and white for now
-    frame_list_np = [frame[0].detach().cpu().numpy() for frame in phi_list]
-    out = cv2.VideoWriter(file_location, cv2.VideoWriter_fourcc(*'mp4v'), 5, (frame_list_np[0].shape[0], frame_list_np[1].shape[0]), False)
-    for frame in frame_list_np:
-        frame -= frame.min()
-        frame /= frame.max()
-        out.write((frame * 255).astype(dtype='uint8'))
+
+    frame_min = float("inf")
+    frame_max = -float("inf")
+    frames = []
+    for phi in phi_list:
+        frame = phi.detach().cpu().numpy()[:3, :height, :width]
+        frame_min = min(frame.min(), frame_min)
+        frame_max = max(frame.max(), frame_max)
+        frames.append(frame)
+    
+    
+    # write frames to video
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(file_location, fourcc, 30, (width, height))
+    for frame in frames:
+        # ensure frame is float between 0 and 1
+        if pixelnorm == 'rescale': 
+            frame = (frame - frame.min()) / (frame.max() - frame.min())
+        elif pixelnorm == 'clip':
+            frame = np.clip(frame, 0, 1)
+        elif pixelnorm == 'sigmoid': 
+            frame = 1 / (1 + np.exp(-frame))
+        else: 
+            raise ValueError("Invalid pixelnorm specified.")
+        
+        frame = (frame*255).astype(np.uint8)
+        frame = np.transpose(frame, (1, 2, 0))
+        out.write(frame)
     out.release()
-
-
-
-
 
 
 
