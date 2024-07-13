@@ -11,6 +11,21 @@ num_steps_per_frames=(1 5)
 # Output directory for results
 output_dir="results/hyperparam_search"
 
+# constants
+batch_size=10
+visualization_period=100
+val_period=100
+lr=0.001
+min_length=64
+max_length=128
+min_num_blocks=2
+max_num_blocks=5
+video_width=50
+video_height=50
+
+
+
+
 # Create output directory if it doesn't exist
 mkdir -p $output_dir
 
@@ -27,7 +42,7 @@ do
                 do
                     for num_steps_per_frame in "${num_steps_per_frames[@]}"
                     do
-                        echo "python3 ../cortex_cube/main.py --sparsity_frac $sparsity_frac --leak $leak --block_overlap_depth $block_overlap_depth --activity_regularization $act_regularization --weight_regularization $weight_regularization --num_steps_per_frame $num_steps_per_frame --out_dir $output_dir/sparsity_${sparsity_frac}_leak_${leak}_block_${block_overlap_depth}_actreg_${act_regularization}_weightreg_${weight_regularization}_steps_${num_steps_per_frame}" >> ./run_commands.txt
+                        echo "python3 ../cortex_cube/main.py --sparsity_frac $sparsity_frac --leak $leak --block_overlap_depth $block_overlap_depth --activity_regularization $act_regularization --weight_regularization $weight_regularization --num_steps_per_frame $num_steps_per_frame --out_dir $output_dir/sparsity_${sparsity_frac}_leak_${leak}_block_${block_overlap_depth}_actreg_${act_regularization}_weightreg_${weight_regularization}_steps_${num_steps_per_frame} --batch_size $batch_size --visualization_period $visualization_period --val_period $val_period --lr $lr --min_length $min_length --max_length $max_length --min_num_blocks $min_num_blocks --max_num_blocks $max_num_blocks --video_width $video_width --video_height $video_height" >> ./run_commands.txt
                     done
                 done
             done
