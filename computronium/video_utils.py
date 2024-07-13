@@ -75,7 +75,7 @@ def async_video_loader(video_paths, num_workers, rescale=[240, 360]):
         futures = [executor.submit(load_video, path) for path in video_paths]
         results = [future.result() for future in concurrent.futures.as_completed(futures)]
     # discard any results that are -1
-    results = [result for result in results if result.any()]
+    results = [result for result in results if result is not None]
     # check for shortest video 
     # print("Cropping videos in batch to min size...")
     # print("Type of results: ", type(results))
