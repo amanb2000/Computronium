@@ -146,7 +146,7 @@ class cube(nn.Module):
         #print("Check shared_channel_idx")
         activation_reg += torch.mean(self.Phi[-1][:, shared_channel_idx])**2
 
-        return MSE + weight_regularization*weight_reg + activation_regularization*activation_reg
+        return MSE + weight_regularization*weight_reg + activation_regularization*activation_reg, MSE, weight_regularization*weight_reg, activation_regularization*activation_reg
 
     def instrumentation_values(self):
         shared_channel_idx = torch.tensor([(i+1)*self.block_length + j for i in range(self.num_blocks-1) for j in range(self.block_overlap_depth)])
