@@ -48,8 +48,11 @@ def parse_args():
     parser.add_argument('--kernel_size', type=int, default=3, help="Kernel size. Defualt=3")
     parser.add_argument('--num_channels_list', nargs='+', type=int, default=[16, 128, 16], help="List of channel numbers. Defualt=[16,128,16]")
 
-    parser.add_argument('--num_blocks', type=int, default=3, help="Number of blocks. Default=3")
-    parser.add_argument('--length', type=int, default=128, help="Extra length on Phi tensor. Default=128")
+    parser.add_argument('--min_num_blocks', type=int, default=2, help="Minimum number of blocks. Default=2")
+    parser.add_argument('--max_num_blocks', type=int, default=5, help="Maximum number of blocks. Default=5")
+
+    parser.add_argument('--min_length', type=int, default=64, help="Minimum extra length on Phi tensor. Default=64")
+    parser.add_argument('--max_length', type=int, default=128, help="Maximum extra length on Phi tensor. Default=128")
 
     parser.add_argument('--block_overlap_depth', type=int, default=1, help="Block overlap depth. Default=1")
     parser.add_argument('--weight_regularization', type=float, default=1.0, help="Weight regularization. Default=1.0")
@@ -67,7 +70,7 @@ def parse_args():
 
 
 args = parse_args()
-assert args.length >= args.video_width
+assert args.min_length >= args.video_width
 
 
 # Use the parsed arguments
@@ -81,8 +84,10 @@ VIDEO_HEIGHT = args.video_height
 VIDEO_WIDTH = args.video_width
 KERNEL_SIZE = args.kernel_size
 NUM_CHANNELS_LIST = args.num_channels_list
-NUM_BLOCKS = args.num_blocks
-LENGTH = args.length
+MIN_NUM_BLOCKS = args.min_num_blocks
+MAX_NUM_BLOCKS = args.max_num_blocks
+MIN_LENGTH = args.min_length
+MAX_LENGTH = args.max_length
 BLOCK_OVERLAP_DEPTH = args.block_overlap_depth
 WEIGHT_REGULARIZATION = args.weight_regularization
 ACTIVITY_REGULARIZATION = args.activity_regularization
@@ -145,9 +150,7 @@ log("Device: " + str(device), os.path.join(OUT_DIR, 'loss.log'))
 
 model = cube(
     kernel_size=KERNEL_SIZE, 
-    length=LENGTH,
     num_channels_list=NUM_CHANNELS_LIST, 
-    num_blocks=NUM_BLOCKS, 
     block_overlap_depth=BLOCK_OVERLAP_DEPTH,
     device=device,
     leak=args.leak,
@@ -182,6 +185,11 @@ def get_loss_on_video_batch(data_np: np.ndarray,
     data = torch.tensor(data_np, dtype=torch.float32).to(device)
     num_timesteps = data.shape[0]
 
+    num_blocks = np.random.randint(MIN_NUM_BLOCKS, MAX_NUM_BLOCKS)
+    length = np.random.randint(MIN_LENGTH, MAX_LENGTH)
+    print("Num blocks: ", num_blocks)
+    print("Length: ", length)
+
 
     optimizer.zero_grad()
     loss = 0
@@ -190,8 +198,9 @@ def get_loss_on_video_batch(data_np: np.ndarray,
     activity_reg_total = 0.0
     for t in range(num_timesteps-1):
         x = data[t]
+
         for subtimestep in range(num_steps_per_frame): 
-            y = model(x, instrument_correlations=instrument_correlations)
+            y = model(x, instrument_correlations=instrument_correlations, num_blocks=num_blocks, length=length)
 
             model.Phi.append(model.Phi[-1]*(1-args.leak) + y * model.dt)
             model.Phi[-1][:, 0:3] *= 0 # zero out the first 3 channels in the prediction layer
@@ -210,8 +219,6 @@ def get_loss_on_video_batch(data_np: np.ndarray,
     print("\tMean MSE over all frames: ", MSE_total / num_timesteps)
     print("\tMean weight reg: ", weight_reg_total / num_timesteps)
     print("\tMean activity reg: ", activity_reg_total / num_timesteps)
-
-
 
         # print("predicted mean: ", y[:, 0:3].mean())
         # print("real mean: ", data.mean())
