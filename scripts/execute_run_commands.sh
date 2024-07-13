@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Check if the correct number of arguments is provided
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 start_index end_index"
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 command_file start_index end_index "
     exit 1
 fi
 
-start_idx=$1
-end_idx=$2
-command_file="run_commands.txt"
+command_file=$1
+start_idx=$2
+end_idx=$3
 
 # Check if the command file exists
 if [ ! -f "$command_file" ]; then

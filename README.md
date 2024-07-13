@@ -29,12 +29,12 @@ cd dataset
 ```
 
 **Hyperparam Search Scripts**
-```cd scripts
-bash cube_main_hyperparam.sh
-```
-then, after run_commands.txt is created,….
-```
-bash execute_run_commands 1 10
+```bash
+# generate list of experiment calls in scripts/{current time}run_commands.txt
+bash scripts/cube_main_hyperparam.sh
+
+# scripts/execute_run_commands.sh [experiment list] [start index] [end index]
+bash scripts/execute_run_commands.sh scripts/2024-07-13_11-42-29_UTCrun_commands.txt 0 256
 ```
 [replace 1 10 with start & end indices you wish to run. There are 256 python calls with different hyperparams currently]
 
