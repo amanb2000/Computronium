@@ -185,8 +185,8 @@ def get_loss_on_video_batch(data_np: np.ndarray,
     data = torch.tensor(data_np, dtype=torch.float32).to(device)
     num_timesteps = data.shape[0]
 
-    num_blocks = np.random.randint(MIN_NUM_BLOCKS, MAX_NUM_BLOCKS)
-    length = np.random.randint(MIN_LENGTH, MAX_LENGTH)
+    num_blocks = np.random.randint(MIN_NUM_BLOCKS, MAX_NUM_BLOCKS + 1)
+    length = np.random.randint(MIN_LENGTH, MAX_LENGTH + 1)
     print("Num blocks: ", num_blocks)
     print("Length: ", length)
 
