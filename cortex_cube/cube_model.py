@@ -7,9 +7,7 @@ import torch.nn.functional as F
 class cube(nn.Module):
     def __init__(self, 
                  kernel_size=3, 
-                 length=64, 
                  num_channels_list=[16, 128, 16], 
-                 num_blocks=3, 
                  block_overlap_depth=1, 
                  device="cpu", 
                  dt=0.1, 
@@ -26,7 +24,6 @@ class cube(nn.Module):
         if num_channels_list[0] != num_channels_list[-1]:
             raise ValueError("First and last number of kernels must be the same")
         
-        self.num_blocks = num_blocks
         self.block_overlap_depth = block_overlap_depth
         self.kernel_size = kernel_size
         self.num_channels_list = num_channels_list
@@ -38,17 +35,16 @@ class cube(nn.Module):
         self.body_conv = nn.ModuleList([nn.Conv2d(num_channels_list[i], num_channels_list[i+1], kernel_size=kernel_size, padding=kernel_size//2) for i in range(self.len_num_channels_list-1)])
 
         self.block_length = num_channels_list[-1] - block_overlap_depth
-        self.Phi_depth = self.num_blocks * self.block_length + block_overlap_depth
+        
 
         self.Phi = [] 
         self.dt = dt
-        self.length = length
         self.leak = leak
         self.sparsity_frac = sparsity_frac
 
         self.correlation_tensor = []
 
-    def forward(self, x_, instrument_correlations=True):
+    def forward(self, x_, num_blocks, length, instrument_correlations=True):
         """
         args: 
             x_: 
@@ -59,6 +55,9 @@ class cube(nn.Module):
             dPhidt: 
                 tensor of shape (N, self.Phi_depth, m, n)
         """
+        self.num_blocks = num_blocks
+        self.length = length
+
         # make a mask with sparsity_frac of the values being 1
         mask = torch.rand_like(x_) > self.sparsity_frac
         x = x_ * mask
@@ -75,7 +74,8 @@ class cube(nn.Module):
             correlation_tensor_t = torch.zeros(batch_size, self.num_blocks-1, self.block_overlap_depth, m, n, 2).to(self.device)
 
         if len(self.Phi) == 0:
-            self.Phi.append(torch.zeros(batch_size, self.Phi_depth, m, n).to(self.device))
+            Phi_depth = self.num_blocks * self.block_length + self.block_overlap_depth
+            self.Phi.append(torch.zeros(batch_size, Phi_depth, m, n).to(self.device))
 
         input_block_depth = self.num_channels_list[-1]
 
