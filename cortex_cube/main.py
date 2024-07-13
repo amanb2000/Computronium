@@ -92,16 +92,20 @@ if not os.path.exists(OUT_DIR):
     os.makedirs(OUT_DIR)
 
 
+# get the set of validation set paths 
+val_paths = glob.glob(os.path.join(args.val_dir, "*.mp4"))
+
 video_paths = glob.glob(os.path.join(DATA_DIR, "*.mp4"))
 if args.num_overfit_videos > 0: 
     video_paths = video_paths[:args.num_overfit_videos]
+    val_paths = val_paths[:args.num_overfit_videos]
+    print("Debug video paths: ", video_paths)
 print("Length of video paths: ", len(video_paths))
 log("Length of video paths: " + str(len(video_paths)), os.path.join(OUT_DIR, 'loss.log'))
 
-# get the set of validation set paths 
-val_paths = glob.glob(os.path.join(args.val_dir, "*.mp4"))
 print("Length of validation paths: ", len(val_paths))
 log("Length of validation paths: " + str(len(val_paths)), os.path.join(OUT_DIR, 'loss.log'))
+
 
 model_output_path = os.path.join(OUT_DIR, 'best_model.pth')
 
@@ -180,6 +184,9 @@ def get_loss_on_video_batch(data_np: np.ndarray,
 
     optimizer.zero_grad()
     loss = 0
+    MSE_total = 0.0
+    weight_reg_total = 0.0
+    activity_reg_total = 0.0
     for t in range(num_timesteps-1):
         x = data[t]
         for subtimestep in range(num_steps_per_frame): 
@@ -189,10 +196,22 @@ def get_loss_on_video_batch(data_np: np.ndarray,
             model.Phi[-1][:, 0:3] *= 0 # zero out the first 3 channels in the prediction layer
             model.Phi[-1][:, 0:3] += y[:, 0:3] # set the first 3 channels to the absolute prediction (non-differential)
 
-        loss += model.loss(data[t+1],
+        total_loss, MSE, weight_reg_loss, activity_reg_loss = model.loss(data[t+1],
                            y[:, 0:3], 
                            weight_regularization=weight_regularization, 
-                           activation_regularization=activity_regularization) / num_timesteps
+                           activation_regularization=activity_regularization)
+        MSE_total += MSE 
+        weight_reg_total += weight_reg_loss
+        activity_reg_total += activity_reg_loss
+    loss = (MSE_total + weight_reg_total + activity_reg_total) / num_timesteps 
+    print("=== LOSS REPORT ===")
+    print("\tMean loss over all frames in batch: ", loss)
+    print("\tMean MSE over all frames: ", MSE_total / num_timesteps)
+    print("\tMean weight reg: ", weight_reg_total / num_timesteps)
+    print("\tMean activity reg: ", activity_reg_total / num_timesteps)
+
+
+
         # print("predicted mean: ", y[:, 0:3].mean())
         # print("real mean: ", data.mean())
         # save the instrumentation values 
@@ -278,6 +297,14 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
     print(lg_str)
     log(lg_str, os.path.join(OUT_DIR, 'loss.log'))
 
+    if epoch % args.visualization_period == 0: 
+            log("Starting visualization...", os.path.join(OUT_DIR, 'loss.log'))
+            vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.mp4")
+            print("Saving visualization to ", vis_path)
+            batch_0_tmp = create_phi_batch_list(model.Phi)[0] # take the 0th batch
+            save_video_from_phi_list(batch_0_tmp, vis_path, width=VIDEO_WIDTH, height=VIDEO_HEIGHT, pixelnorm='clip')
+            print("Done!")
+            log("Done visualizing.", os.path.join(OUT_DIR, 'loss.log'))
 
     # TODO: add validation set, etc. 
     # compute validation loss
@@ -320,14 +347,7 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
             log("Model saved.", os.path.join(OUT_DIR, 'loss.log'))
 
 
-    if epoch % args.visualization_period == 0: 
-        log("Starting visualization...", os.path.join(OUT_DIR, 'loss.log'))
-        vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.avi")
-        print("Saving visualization to ", vis_path)
-        batch_0_tmp = create_phi_batch_list(model.Phi)[0] # take the 0th batch
-        save_video_from_phi_list(batch_0_tmp, vis_path)
-        print("Done!")
-        log("Done visualizing.", os.path.join(OUT_DIR, 'loss.log'))
+    
 
     model.Phi = []
     model.correlation_tensor = []
