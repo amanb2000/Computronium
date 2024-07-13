@@ -342,7 +342,7 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
                 total_val_loss += val_loss.item()
                 cnt += 1
 
-                if cnt > (len(val_paths) // BATCH_SIZE) + 1: 
+                if cnt > (len(val_paths) // BATCH_SIZE): 
                     break
         log('Done computing validation loss.', os.path.join(OUT_DIR, 'loss.log'))
         
