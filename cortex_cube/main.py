@@ -317,7 +317,9 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
                 save_video_from_phi_list(batch_0_tmp, vis_path, width=VIDEO_WIDTH, height=VIDEO_HEIGHT, pixelnorm='clip')
 
                 vis_path = os.path.join(OUT_DIR, f"baseline{epoch}_batchel{k}.mp4")
-                save_video_from_phi_list([i for i in torch.tensor(data_np)[:, k]], vis_path)
+                # save_video_from_phi_list([i for i in torch.tensor(data_np)[:, k]], vis_path)
+                save_video_from_phi_list([i for i in torch.tensor(data_np)[:, k]], vis_path, width=VIDEO_WIDTH, height=VIDEO_HEIGHT, pixelnorm='clip')
+
 
             print("Done!")
             log("Done visualizing.", os.path.join(OUT_DIR, 'loss.log'))
