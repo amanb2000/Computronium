@@ -151,7 +151,8 @@ model = cube(
     block_overlap_depth=BLOCK_OVERLAP_DEPTH,
     device=device,
     leak=args.leak,
-    dt=args.dt).to(device)
+    dt=args.dt,
+    sparsity_frac=args.sparsity_frac).to(device)
 
 # Set up the optimizer
 optimizer = optim.Adam(model.parameters(), lr=LR)
@@ -301,8 +302,16 @@ for data_np in video_data_generator(video_paths, batch_size=BATCH_SIZE, num_work
             log("Starting visualization...", os.path.join(OUT_DIR, 'loss.log'))
             vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}.mp4")
             print("Saving visualization to ", vis_path)
-            batch_0_tmp = create_phi_batch_list(model.Phi)[0] # take the 0th batch
-            save_video_from_phi_list(batch_0_tmp, vis_path, width=VIDEO_WIDTH, height=VIDEO_HEIGHT, pixelnorm='clip')
+            batch_0_tmp_ = create_phi_batch_list(model.Phi) # take the 0th batch
+
+            for k in range(len(batch_0_tmp_)):
+                vis_path = os.path.join(OUT_DIR, f"vis_ep{epoch}_batchel{k}.mp4")
+                batch_0_tmp = batch_0_tmp_[k]
+                save_video_from_phi_list(batch_0_tmp, vis_path, width=VIDEO_WIDTH, height=VIDEO_HEIGHT, pixelnorm='clip')
+
+                vis_path = os.path.join(OUT_DIR, f"baseline{epoch}_batchel{k}.mp4")
+                save_video_from_phi_list([i for i in torch.tensor(data_np)[:, k]], vis_path)
+
             print("Done!")
             log("Done visualizing.", os.path.join(OUT_DIR, 'loss.log'))
 
