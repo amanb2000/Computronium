@@ -247,9 +247,19 @@ def compute_correlation_tensor(model, epoch):
         
         correlations.append(cor.statistic)
 
+    # print("Correlations of layer overlap, measuring mutual inhibition.")
+    # for i, cor in enumerate(correlations):
+    #     print(f"Block Junction {i}: {cor}")
     print("Correlations of layer overlap, measuring mutual inhibition.")
     for i, cor in enumerate(correlations):
         print(f"Block Junction {i}: {cor}")
+        log(f"Block Junction {i}: {cor}", os.path.join(OUT_DIR, 'loss.log'))
+        # Plot a random 1% of the correlations, with trendline
+        plt.scatter(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1], s=0.005, alpha=0.5)
+        # save figure
+        plt.savefig(os.path.join(OUT_DIR, f'correlation_scatter_ep{epoch}_block{i}.png'))
+        # clear figure for next time
+        plt.clf()
 
     # Plot a random 1% of the correlations, with trendline
     plt.scatter(cor_tensor_flattened[i, :, 0], cor_tensor_flattened[i, :, 1], s=0.005, alpha=0.5)
