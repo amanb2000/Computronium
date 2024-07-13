@@ -30,7 +30,7 @@ def rescale_frame(frame, height_width):
     if hd / hf < wd / wf:
         # scale by width 
         scale = wd/wf
-        frame_ = cv2.resize(frame, (int(wf*scale), int(hf*scale)))
+        frame_ = cv2.resize(frame, (round(wf*scale), round(hf*scale)))
         # print("Scaled frame size: ", frame_.shape)
         # crop to height 
         h = frame_.shape[0]
@@ -40,7 +40,7 @@ def rescale_frame(frame, height_width):
     else:
         # scale by height 
         scale = hd/hf
-        frame_ = cv2.resize(frame, (int(wf*scale), int(hf*scale)))
+        frame_ = cv2.resize(frame, (round(wf*scale), round(hf*scale)))
         # crop to width  
         w = frame_.shape[1]
         frame_ = frame_[:, (w-wd)//2:(w+wd)//2]
@@ -51,12 +51,16 @@ def load_video(video_path):
 
     Returns numpy array of shape [num_frames, height, width, channels]
     """
-    with av.open(video_path) as container:
-        frames = []
-        for frame in container.decode(video=0):
-            frame = frame.to_ndarray(format='rgb24')
-            frames.append(frame)
-    return np.stack(frames)
+    try: 
+        with av.open(video_path) as container:
+            frames = []
+            for frame in container.decode(video=0):
+                frame = frame.to_ndarray(format='rgb24')
+                frames.append(frame)
+        return np.stack(frames)
+    except Exception as e: 
+        print(f"[load_video] failed to load video at {video_path} with exception {e}")
+        return None
 
 def async_video_loader(video_paths, num_workers, rescale=[240, 360]):
     """ Given a set of video paths, number of workers, and a rescale factor, 
@@ -70,6 +74,8 @@ def async_video_loader(video_paths, num_workers, rescale=[240, 360]):
     with concurrent.futures.ThreadPoolExecutor(num_workers) as executor:
         futures = [executor.submit(load_video, path) for path in video_paths]
         results = [future.result() for future in concurrent.futures.as_completed(futures)]
+    # discard any results that are -1
+    results = [result for result in results if result.any()]
     # check for shortest video 
     # print("Cropping videos in batch to min size...")
     # print("Type of results: ", type(results))
@@ -83,9 +89,19 @@ def async_video_loader(video_paths, num_workers, rescale=[240, 360]):
         # print("Shape of results[{i}]: ", results[i].shape)
 
     min_length = min(video.shape[0] for video in results)
+
+    while min_length == 0: 
+        # remove videos with 0 length
+        print("Loaded 0 length video, removing...")
+        results = [video for video in results if video.shape[0] > 0]
+        min_length = min(video.shape[0] for video in results)
     # print("min length: ", min_length)
     results = [video[:min_length] for video in results]
-    return np.stack(results)
+    try: 
+        stacked_results = np.stack(results)
+    except: 
+        pdb.set_trace()
+    return stacked_results
 
 def video_data_generator(video_paths, batch_size, 
                          num_workers=4, 
