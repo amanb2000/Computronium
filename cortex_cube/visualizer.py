@@ -243,6 +243,8 @@ def save_video_from_phi_list(phi_list, file_location, fps=30, width=24, height=2
         
         frame = (frame*255).astype(np.uint8)
         frame = np.transpose(frame, (1, 2, 0))
+        # bgr to rgb
+        frame = frame[..., ::-1]
         out.write(frame)
     out.release()
 
