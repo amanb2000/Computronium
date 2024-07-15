@@ -9,6 +9,8 @@ opencv-python
 av
 pydantic
 
+streamlit
+
 jax
 coverage
 vispy
