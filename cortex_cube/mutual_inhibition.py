@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument("--height", type=int, default=256, help="Height of the cube. Default=256.")
     parser.add_argument("--width", type=int, default=32, help="Width of the cube. Default=256")
     parser.add_argument("--kernel_size", type=int, default=3, help="Size of the convolutional kernels. Default=3.")
-    parser.add_argument("--num_channels_list", type=int, nargs="+", default=[16, 32, 64], help="Number of channels in each convolutional layer. Default=[16, 32, 64].")
+    parser.add_argument("--num_channels_list", type=int, nargs="+", default=[16, 64, 16], help="Number of channels in each convolutional layer. Default=[16, 32, 64].")
 
     # Arguments for training:
     # --lr_left, --lr_right, --num_epochs, --num_timesteps, --batch_size
@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument("--lr_right", type=float, default=0.01, help="Learning rate for the right cube.")
     parser.add_argument("--num_epochs", type=int, default=1000, help="Number of epochs to train for.")
     parser.add_argument("--num_timesteps", type=int, default=100, help="Number of timesteps to simulate for each training example.")
+    parser.add_argument("--batch_size", type=int, default=5, help="Batch size for training. Default=5.")
     parser.add_argument("--leak", type=float, default=0.1, help="Per-timestep leak activity[t+1] = activity[t]*(1-leak) for computronium cubes (0-1). Default=0.1.")
 
 
@@ -52,6 +53,11 @@ def parse_args():
     # --save_dir, --save_every
     parser.add_argument("--save_dir", type=str, default="results/MI/test00", help="Directory to save the trained models.")
     parser.add_argument("--save_every", type=int, default=20, help="Save the models and shared layer videos every n epochs. Default=20.")
+
+    parser.add_argument("--mps", action="store_true", help="Use MPS (matrix product state) for training. Default=False.")
+
+    args = parser.parse_args()
+    return args
 
 def setup_save_dir(args): 
     # make args.save_dir if it doesn't exist
@@ -64,12 +70,10 @@ def setup_save_dir(args):
 
 def get_inhibition_loss(left_model:cube, 
                         right_model:cube, 
-                        args, 
-                        model_to_update="left"): 
+                        args): 
     """
     Computes the mutual inhibition loss for each model. 
     """
-    assert model_to_update == "left" or model_to_update == "right", "model_to_update must be 'left' or 'right'."
 
     shared_layer_list = []
     shared_layer_0 = torch.zeros(args.batch_size, 3, args.height, args.width).to(left_model.device)
@@ -115,7 +119,7 @@ def main():
     print("Device: ", device)
     log("Device: " + str(device), log_path)
 
-    log("Making left model...")
+    log("Making left model...", log_path)
     left_model = cube(
         kernel_size = args.kernel_size,
         num_channels_list = args.num_channels_list, 
@@ -125,9 +129,9 @@ def main():
         dt = args.dt, 
         sparsity_frac=args.left_obs_sparsity_frac
     ).to(device)
-    log("Done making left model.")
+    log("Done making left model.", log_path)
 
-    log("Making right model...")
+    log("Making right model...", log_path)
     right_model = cube(
         kernel_size = args.kernel_size,
         num_channels_list = args.num_channels_list, 
@@ -137,15 +141,36 @@ def main():
         dt = args.dt, 
         sparsity_frac=args.right_obs_sparsity_frac
     ).to(device)
-    log("Done making right model.")
+    log("Done making right model.", log_path)
 
 
     # set up optimizer 
-    left_optimizer = optim.Adam(left_model.parameters(), lr=args.lr)
-    right_optimizer = optim.Adam(right_model.parameters(), lr=args.lr)
+    left_optimizer = optim.Adam(left_model.parameters(), lr=args.lr_left)
+    right_optimizer = optim.Adam(right_model.parameters(), lr=args.lr_right)
+
+    left_model.train()
 
     # train model -- let's start with a test loss computation call
-    loss, shared_layer_list = get_inhibition_loss(left_model, right_model, args, model_to_update="left")
+    loss, shared_layer_list = get_inhibition_loss(left_model, right_model, args)
+
+    log(f"Initial loss: {loss.item()}", log_path)
+
+    # optimize left model's weights
+    for epoch in range(args.num_epochs): 
+        left_optimizer.zero_grad()
+        right_optimizer.zero_grad()
+
+        loss, shared_layer_list = get_inhibition_loss(left_model, right_model, args)
+        loss.backward()
+        left_optimizer.step()
+
+        left_model.clip_weights()
+
+        log(f"Epoch {epoch}: Loss: {loss.item()}", log_path)
+        if epoch % args.save_every == 0: 
+            torch.save(left_model.state_dict(), os.path.join(args.save_dir, f"left_model_epoch{epoch}.pt"))
+            torch.save(right_model.state_dict(), os.path.join(args.save_dir, f"right_model_epoch{epoch}.pt"))
+
 
 
 
