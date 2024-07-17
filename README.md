@@ -38,6 +38,9 @@ bash scripts/execute_run_commands.sh scripts/2024-07-13_11-42-29_UTCrun_commands
 ```
 [replace 1 10 with start & end indices you wish to run. There are 256 python calls with different hyperparams currently]
 
+**Evaluation Scripts**
+(Alex TODO)
+
 ## Tests
 ```bash
 # run all tests: 
