@@ -146,7 +146,7 @@ def main():
 
     # set up optimizer 
     left_optimizer = optim.Adam(left_model.parameters(), lr=args.lr_left)
-    right_optimizer = optim.Adam(right_model.parameters(), lr=args.lr_right)
+    # right_optimizer = optim.Adam(right_model.parameters(), lr=args.lr_right)
 
     left_model.train()
 
@@ -158,13 +158,11 @@ def main():
     # optimize left model's weights
     for epoch in range(args.num_epochs): 
         left_optimizer.zero_grad()
-        right_optimizer.zero_grad()
+        # right_optimizer.zero_grad()
 
         loss, shared_layer_list = get_inhibition_loss(left_model, right_model, args)
         loss.backward()
         left_optimizer.step()
-
-        left_model.clip_weights()
 
         log(f"Epoch {epoch}: Loss: {loss.item()}", log_path)
         if epoch % args.save_every == 0: 
