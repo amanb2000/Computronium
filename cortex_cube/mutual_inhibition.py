@@ -62,6 +62,41 @@ def setup_save_dir(args):
         json.dump(vars(args), f)
 
 
+def get_inhibition_loss(left_model:cube, 
+                        right_model:cube, 
+                        args, 
+                        model_to_update="left"): 
+    """
+    Computes the mutual inhibition loss for each model. 
+    """
+    assert model_to_update == "left" or model_to_update == "right", "model_to_update must be 'left' or 'right'."
+
+    shared_layer_list = []
+    shared_layer_0 = torch.zeros(args.batch_size, 3, args.height, args.width).to(left_model.device)
+    shared_layer_list.append(shared_layer_0)
+    for t in range(args.num_timesteps-1): 
+        y_left = left_model(shared_layer_list[-1], num_blocks=args.num_blocks_left, length=args.height)
+        y_right = right_model(shared_layer_list[-1], num_blocks=args.num_blocks_right, length=args.height)
+
+        left_model.Phi.append(left_model.Phi[-1] * (1-args.leak) + y_left * left_model.dt)
+        left_model.Phi[-1][:, 0:3] *= 0
+        left_model.Phi[-1][:, 0:3] += y_left[:, 0:3]
+
+        right_model.Phi.append(right_model.Phi[-1] * (1-args.leak) + y_right * right_model.dt)
+        right_model.Phi[-1][:, 0:3] *= 0
+        right_model.Phi[-1][:, 0:3] += y_right[:, 0:3]
+
+
+        shared_layer_next = (1-args.leak)*shared_layer_list[-1] + left_model.Phi[-1][:, 0:3] * args.dt + right_model.Phi[-1][:, 0:3] * args.dt
+        shared_layer_list.append(shared_layer_next)
+
+    loss = torch.mean((shared_layer_list[-1])**2)
+
+    return loss, shared_layer_list
+
+
+
+
 def main(): 
     args = parse_args()
     setup_save_dir(args)
@@ -106,7 +141,11 @@ def main():
 
 
     # set up optimizer 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    left_optimizer = optim.Adam(left_model.parameters(), lr=args.lr)
+    right_optimizer = optim.Adam(right_model.parameters(), lr=args.lr)
+
+    # train model -- let's start with a test loss computation call
+    loss, shared_layer_list = get_inhibition_loss(left_model, right_model, args, model_to_update="left")
 
 
 
