@@ -63,7 +63,7 @@ def eval_checkpoint(model, args, val_loader, num_iters, num_blocks=None, length=
 import pandas as pd
 from itertools import product
 # block_range_iter and length_range_iter are iterables of the range of values to test
-def eval_checkpoint_over_block_length_range(dir_path, val_paths, block_range_iter=range(2,10), length_range_iter=range(50, 100, 10), loss_label="MSE", device="cuda:0"):
+def eval_checkpoint_over_block_length_range(dir_path, val_paths, block_range_iter=None, length_range_iter=None, loss_label="MSE", device="cuda:0"):
     # save results to a dataframe
 
     # if file exists, skip
@@ -74,6 +74,12 @@ def eval_checkpoint_over_block_length_range(dir_path, val_paths, block_range_ite
     model_path = os.path.join(dir_path, "best_model.pth")
     args_path = os.path.join(dir_path, "args.json")
     model, args = initialize_pretrained_model(model_path, args_path, device)
+
+    if block_range_iter is None:
+        block_range_iter = range(args.min_num_blocks, 2 * args.max_num_blocks, 2)
+
+    if length_range_iter is None:
+        length_range_iter = range(args.min_length, 2 * args.max_length, 10)
 
     val_loader = video_data_generator(val_paths, batch_size=args.batch_size, num_workers=args.num_workers, rescale=[args.video_height, args.video_width], float01=True)
 
