@@ -6,6 +6,7 @@ from cube_model import cube
 import os
 from computronium.video_utils import async_video_loader, video_data_generator
 
+
 class DictToObject:
     def __init__(self, dictionary):
         for key, value in dictionary.items():

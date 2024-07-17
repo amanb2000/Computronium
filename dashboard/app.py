@@ -1,11 +1,18 @@
 import streamlit as st
 import os
+import sys
 import json
 from pathlib import Path
 import re
 import subprocess
 import pandas as pd
 from datetime import datetime
+import glob
+
+sys.path.append("cortex_cube")
+from val import eval_checkpoint_over_block_length_range
+
+
 
 def is_file_open(file_path):
     """Check if a file is currently open (being written to)."""
@@ -196,6 +203,32 @@ def main():
     if st.button("Refresh Results Overview"):
         overview_df = generate_overview_dataframe(experiment_folders)
         st.dataframe(overview_df)
+
+
+    if st.button("Generate validation report"):
+        # get args.json from selected_experiment/args.json
+        selected_folder = selected_experiment.split(" (Active)")[0].strip()
+        args_path = os.path.join(selected_folder, 'args.json')
+        with open(args_path, 'r') as f:
+            args = json.load(f)
+        # print to screen 
+        st.write("## Validation Report")
+        st.write("### Experiment Details")
+        st.write(f"**Experiment Folder:** {selected_folder}")
+        st.write(f"**Args path**: `\"{args_path}\"`")
+        st.write(f"**Arguments:**")
+        st.json(args)
+        st.write(f"**Validation directory**: `\"{args['val_dir']}\"`")
+
+        # glob the validation paths: 
+        val_paths = glob.glob(f"{args['val_dir']}/*.mp4")
+        st.write(f"**Validation paths:**")
+        st.write(val_paths)
+
+        # run validation script
+        eval_df = eval_checkpoint_over_block_length_range(selected_folder, val_paths)
+        st.write("### Evaluation Results")
+        st.write(eval_df)
 
 if __name__ == "__main__":
     main()
