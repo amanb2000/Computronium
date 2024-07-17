@@ -226,9 +226,9 @@ def main():
         st.write(val_paths)
 
         # run validation script
-        eval_df = eval_checkpoint_over_block_length_range(selected_folder, val_paths)
-        st.write("### Evaluation Results")
-        st.write(eval_df)
+        # eval_df = eval_checkpoint_over_block_length_range(selected_folder, val_paths)
+        # st.write("### Evaluation Results")
+        # st.write(eval_df)
 
 if __name__ == "__main__":
     main()
